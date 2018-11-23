@@ -116,32 +116,6 @@ def print_chains(chain_a, chain_b, labels=("Chain A", "Chain B")):
                 break
         print `a` if a else " "*70, `b` if b else ""
 
-def randomcomparison():
-    root = Block(None, 0, '')
-    chain_a = [root]
-    t = 0
-    for i in range(random.randint(5, 20)):
-        t += random.random() * 600
-        chain_a.append(Block(chain_a[-1], t, tag="-A"))
-    
-    tgt =random.randint(0, len(chain_a)-1)
-    chain_b = [chain_a[tgt]]
-    t = chain_b[-1].firstseen
-    for i in range(random.randint(5, 20)):
-        t += random.random() * 600
-        chain_b.append(Block(chain_b[-1], t, tag="-B"))
-    del chain_b[0]
-
-    print_chains(chain_a, chain_b)
-    
-    print "\nPenalty and score calculations:"
-
-    swinner = compare_blocks_simple_pow(chain_a[-1], chain_b[-1])
-    ttwinner = compare_blocks_toomim_time(chain_a[-1], chain_b[-1])
-
-    print "\ncompare_blocks_simple_pow winner: ", `swinner`
-    print "compare_blocks_toomim_time winner:", `ttwinner`
-
 def reorgattack(attacker_rate, defender_rate, attacker_delay, duration, finalize=10, debug=debug):
     root = Block(None, 0, '')
     chain_att = [root]
