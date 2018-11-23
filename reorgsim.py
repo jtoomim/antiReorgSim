@@ -50,7 +50,9 @@ def find_shared_ancestor(a, b):
 def compare_blocks_simple_pow(a, b):
     return a if a.pow > b.pow else b
 
-def time_to_beat(enemytip, pow):
+def time_to_beat(enemytip, pow, mytime):
+    if enemytip.pow < pow:
+        return mytime
     while enemytip.parent and pow < enemytip.parent.pow:
         enemytip = enemytip.parent
     if not enemytip.parent:
@@ -77,7 +79,7 @@ def compare_blocks_toomim_time(a, b, tc=120., finalize=False, debug=debug):
             blk = blk.parent
         for blk in reversed(blocks):
             if not hasattr(blk, 'penalty'): # small optimization because python is slow
-                ts = time_to_beat(a if chaintip == b else b, blk.pow)
+                ts = time_to_beat(a if chaintip == b else b, blk.pow, blk.firstseen)
                 pseudoheight = (blk.pow - root.pow) / root.difficulty
                 blk.delay = max(0, blk.firstseen - ts)
                 blk.penalty = (blk.delay / tc) / (pseudoheight)**2
