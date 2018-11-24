@@ -6,7 +6,9 @@ params = {'attacker_rate':1.5,        # attacker hashrate, where 1.0 is 100% of 
           'defender_rate':1.,         # defender hashrate
           'attacker_delay':1200.,     # seconds that the attacker waits before publishing their chain
           'duration':60000.,          # seconds before the attacker gives up if they're not ahead
-          'finalize':10}              # allow finalization after this many blocks (0 to disable)
+          'finalize':10,              # allow finalization after this many blocks (0 to disable)
+          'exp':1.9,                  # exponent for decaying contributions of later blocks to the penalty factor
+          'tc':120.}                  # time constant for penalizing blocks. A delay of tc on the first block gives a penalty of +1 (2x)
 
 debug=3
 
@@ -62,7 +64,7 @@ def time_to_beat(enemytip, pow, mytime):
     interp = (pow - enemytip.parent.pow) / (enemytip.pow - enemytip.parent.pow)
     return enemytip.parent.firstseen + interp * (enemytip.firstseen - enemytip.parent.firstseen)
 
-def compare_blocks_toomim_time(a, b, tc=120., finalize=False, debug=debug):
+def compare_blocks_toomim_time(a, b, timeconstant, exponent, finalize=False, debug=debug):
     root = find_shared_ancestor(a, b)
     if root == None: # this ain't no fork
         if debug: print "Hey, you're forkless!"
@@ -82,12 +84,15 @@ def compare_blocks_toomim_time(a, b, tc=120., finalize=False, debug=debug):
                 ts = time_to_beat(a if chaintip == b else b, blk.pow, blk.firstseen)
                 pseudoheight = (blk.pow - root.pow) / root.difficulty
                 blk.delay = max(0, blk.firstseen - ts)
-                blk.penalty = (blk.delay / tc) / (pseudoheight)**2
-                blk.chainpenalty = blk.parent.chainpenalty + blk.penalty if hasattr(blk.parent, 'chainpenalty') else 1.+blk.penalty
+                blk.penalty = (blk.delay / timeconstant) / (pseudoheight)**exponent
+                #blk.chainpenalty = blk.parent.chainpenalty + blk.penalty if hasattr(blk.parent, 'chainpenalty') else 1.+blk.penalty
             chainpenalty += blk.penalty
+            blk.chainpenalty = chainpenalty
             if debug>2: print "    Block %6s increased chain penalty by %4.2f to %5.2f from %4.0f sec delay" % (
                 str(blk), blk.penalty, chainpenalty, blk.delay)
         score = (chaintip.pow - root.pow) / chainpenalty
+        chaintip.hyposcore = score
+        chaintip.hypochainpenalty = chainpenalty
         if debug>1: print "Overall for %s: score=%f, pow=%f, penalty=%f, chaintip.chainpenalty=%f\n" % (
             str(chaintip), score, chaintip.pow - root.pow, chainpenalty, chaintip.chainpenalty)
 
@@ -116,7 +121,7 @@ def print_chains(chain_a, chain_b, labels=("Chain A", "Chain B")):
                 break
         print `a` if a else " "*70, `b` if b else ""
 
-def reorgattack(attacker_rate, defender_rate, attacker_delay, duration, finalize=10, debug=debug):
+def reorgattack(attacker_rate, defender_rate, attacker_delay, duration, tc, exp, finalize=10, debug=debug):
     root = Block(None, 0, '')
     chain_att = [root]
     chain_def = [root]
@@ -129,17 +134,17 @@ def reorgattack(attacker_rate, defender_rate, attacker_delay, duration, finalize
         else:
             chain_def.append(Block(chain_def[-1], t, tag='-D'))
 
-    while compare_blocks_toomim_time(chain_def[-1], chain_att[-1], debug=0) == chain_def[-1] and t < duration and not finalized:
+    while compare_blocks_toomim_time(chain_def[-1], chain_att[-1], tc, exp, debug=0) == chain_def[-1] and t < duration and not finalized:
         t += random.expovariate(1) * 600. / (attacker_rate + defender_rate)
         if random.random() < attacker_rate / (attacker_rate + defender_rate):
             chain_att.append(Block(chain_att[-1], t, tag='-A'))
         else:
             chain_def.append(Block(chain_def[-1], t, tag='-D'))
-        if finalize > 0 and compare_blocks_toomim_time(chain_def[-1], chain_att[-1], finalize=finalize, debug=0):
+        if finalize > 0 and compare_blocks_toomim_time(chain_def[-1], chain_att[-1], tc, exp, finalize=finalize, debug=0):
             finalized = 1
 
     if debug>1: print_chains(chain_def, chain_att, labels=("Defender", "Attacker"))
-    return compare_blocks_toomim_time(chain_def[-1], chain_att[-1], debug=debug) == chain_def[-1], len(chain_att), len(chain_def), finalized
+    return compare_blocks_toomim_time(chain_def[-1], chain_att[-1], tc, exp, debug=debug) == chain_def[-1], len(chain_att), len(chain_def), finalized, chain_att[-1], chain_def[-1]
 
 
 if __name__ == "__main__":
