@@ -2,15 +2,15 @@
 import random, traceback, platform
 from math import *
 
-params = {'attacker_rate':1.5,        # attacker hashrate, where 1.0 is 100% of the pre-fork hashrate
+params = {'attacker_rate':2,        # attacker hashrate, where 1.0 is 100% of the pre-fork hashrate
           'defender_rate':1.,         # defender hashrate
-          'attacker_delay':1200.,     # seconds that the attacker waits before publishing their chain
-          'duration':60000.,          # seconds before the attacker gives up if they're not ahead
-          'finalize':10,              # allow finalization after this many blocks (0 to disable)
+          'attacker_delay':60*60.,     # seconds that the attacker waits before publishing their chain
+          'duration':36000.,          # seconds before the attacker gives up if they're not ahead
+          'finalize':0,              # allow finalization after this many blocks (0 to disable)
           'exp':1.9,                  # exponent for decaying contributions of later blocks to the penalty factor
           'tc':120.}                  # time constant for penalizing blocks. A delay of tc on the first block gives a penalty of +1 (2x)
 
-debug=3
+debug=0
 
 seed = random.randint(0, 2**32-1) # you can also set this to a specific integer for repeatability
 print "Seed = %i" % seed
@@ -64,8 +64,8 @@ def time_to_beat(enemytip, pow, mytime):
     interp = (pow - enemytip.parent.pow) / (enemytip.pow - enemytip.parent.pow)
     return enemytip.parent.firstseen + interp * (enemytip.firstseen - enemytip.parent.firstseen)
 
-def compare_blocks_toomim_time(a, b, timeconstant, exponent, finalize=False, debug=debug):
-    root = find_shared_ancestor(a, b)
+def compare_blocks_toomim_time(a, b, timeconstant, exponent, finalize=False, root=None, debug=debug):
+    if root==None: root = find_shared_ancestor(a, b)
     if root == None: # this ain't no fork
         if debug: print "Hey, you're forkless!"
         return compare_blocks_simple_pow(a, b)
@@ -133,14 +133,20 @@ def reorgattack(attacker_rate, defender_rate, attacker_delay, duration, tc, exp,
             chain_att.append(Block(chain_att[-1], attacker_delay, tag='-A'))
         else:
             chain_def.append(Block(chain_def[-1], t, tag='-D'))
-
-    while compare_blocks_toomim_time(chain_def[-1], chain_att[-1], tc, exp, debug=0) == chain_def[-1] and t < duration and not finalized:
+    blocks_per_step = 1
+    i=1
+    while i < blocks_per_step or compare_blocks_toomim_time(chain_def[-1], chain_att[-1], tc, exp, root=root, debug=0) == chain_def[-1] and t < duration and not finalized:
+        if i == blocks_per_step:
+            i = 1
+            if len(chain_def)/3 > blocks_per_step:
+                blocks_per_step += 1
+        else: i+=1
         t += random.expovariate(1) * 600. / (attacker_rate + defender_rate)
         if random.random() < attacker_rate / (attacker_rate + defender_rate):
             chain_att.append(Block(chain_att[-1], t, tag='-A'))
         else:
             chain_def.append(Block(chain_def[-1], t, tag='-D'))
-        if finalize > 0 and compare_blocks_toomim_time(chain_def[-1], chain_att[-1], tc, exp, finalize=finalize, debug=0):
+        if finalize > 0 and compare_blocks_toomim_time(chain_def[-1], chain_att[-1], tc, exp, root=root, finalize=finalize, debug=0):
             finalized = 1
 
     if debug>1: print_chains(chain_def, chain_att, labels=("Defender", "Attacker"))
